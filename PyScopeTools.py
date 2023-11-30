@@ -2,7 +2,7 @@ from struct import unpack, calcsize
 import numpy as np
 from scipy.signal import butter,filtfilt,lfilter,lfilter_zi,sosfilt
 
-class PyPurityTools:
+class PyScopeTools:
     
     #Function to unpack the header
     @staticmethod
@@ -22,16 +22,30 @@ class PyPurityTools:
         params_pattern = '=IBdddd' # (num_samples, sample_bytes, v_off, v_scale, h_off, h_scale, [samples]) ...
         struct_size = calcsize(params_pattern)
         #print(struct_size)
-
+        with open(waveFilename,"rb") as fWave:
+            fWave.seek(0, 2)
+            file_size = fWave.tell()
+            #print("file_size",file_size)
+        
+        
         with open(waveFilename,"rb") as fWave:
             waveList=[]
+            first=True
+            index=0
             while True:
                 #First read and unpack the headers
                 header = fWave.read(struct_size)
                 if not header: break
-                numSamples,bytesPerSample,v_off,v_scale,h_off,h_scale=PyPurityTools.unpackHeader(header,params_pattern) 
-    
-        
+                numSamples,bytesPerSample,v_off,v_scale,h_off,h_scale=PyScopeTools.unpackHeader(header,params_pattern) 
+                if first:
+                    first=False
+                    #print(file_size,numSamples,bytesPerSample)
+                    guessN=int(file_size / (numSamples*bytesPerSample + struct_size))
+                    #print(guessN)
+                    print("Found",guessN,"waveforms with",numSamples,"samples")
+                    waveList=np.zeros((guessN,numSamples))
+                    
+                    
                 #Now read in the waveform samples
                 dataType=np.dtype('>i1')
                 dataList=np.fromfile(fWave,dataType,numSamples)
@@ -43,9 +57,11 @@ class PyPurityTools:
                     voltList-=baseline
                 else:
                     voltList-=v_off
-                waveList.append(voltList)
+                waveList[index]=voltList
+                index=index+1
+                #waveList.append(voltList)
         
-        waveList=np.vstack(waveList)
+        #waveList=np.vstack(waveList)
         #Make an array of time values (assumimg they are all the same sample rates in the file)
         sampList=np.arange(numSamples)
         timeList=sampList*h_scale
